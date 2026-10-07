@@ -1,0 +1,587 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CBT Ujian - Pendidikan Pancasila</title>
+  
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- React & ReactDOM 18 -->
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  
+  <!-- Babel -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <style>
+    body {
+      user-select: none; /* Anti-select */
+      -webkit-user-select: none;
+      -moz-user-select: none;
+      background: linear-gradient(135deg, #06b6d4, #3b82f6);
+      min-height: 100vh;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    }
+    /* Hide scrollbar for clean look */
+    ::-webkit-scrollbar { width: 8px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.3); border-radius: 4px; }
+    
+    .modal-backdrop {
+      position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0, 0, 0, 0.6);
+      backdrop-filter: blur(4px);
+      z-index: 9999;
+      display: flex; align-items: center; justify-content: center;
+    }
+  </style>
+</head>
+<body oncontextmenu="return false;" oncopy="return false;" onpaste="return false;" oncut="return false;">
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useRef, useCallback } = React;
+
+    // --- CONFIGURATION ---
+    const GOOGLE_SHEETS_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbzAdeYN4V8w6gkKS_e5EZwvzKcc_0d8kttZW2sRW9TONhmlqqmlljJbn5zltnayMXIX/exec";
+    const EXAM_SUBJECT = "PENDIDIKAN PANCASILA";
+    const EXAM_TYPE = "ULANGAN HARIAN BAB 1";
+    const EXAM_CLASS = "VIII";
+    const EXAM_DURATION_MINUTES = 90;
+    const STORAGE_KEY = `cbt_${EXAM_SUBJECT}_${EXAM_CLASS}`.replace(/\s+/g, '_');
+
+    // --- RAW QUESTIONS DATA ---
+    const rawQuestionsData = [
+      { id: 1, type: 'mc', question: "Pancasila berkedudukan sebagai fondasi yang menopang tegak dan kokohnya negara Indonesia. Hal ini merupakan pengertian Pancasila sebagai...", options: ["Dasar negara", "Pandangan hidup", "Ideologi negara", "Hukum dasar"], answer: "Dasar negara" },
+      { id: 2, type: 'mc', question: "Fungsi Pancasila sebagai pandangan hidup bangsa berarti Pancasila digunakan sebagai...", options: ["Dasar pembentukan undang-undang", "Pedoman perilaku dan etika sehari-hari", "Alat kekuasaan pemerintah", "Syarat berdirinya negara"], answer: "Pedoman perilaku dan etika sehari-hari" },
+      { id: 3, type: 'mc', question: "Sebagai ideologi negara, Pancasila berfungsi untuk...", options: ["Mengatur sistem hukum pidana", "Membatasi hak asasi manusia", "Memberikan arah dan tujuan yang ingin dicapai bangsa", "Menentukan kepala negara"], answer: "Memberikan arah dan tujuan yang ingin dicapai bangsa" },
+      { id: 4, type: 'mc', question: "Secara yuridis (hukum), kedudukan Pancasila sebagai dasar negara tercantum secara resmi di dalam...", options: ["Batang Tubuh UUD 1945", "Dekrit Presiden 5 Juli 1959", "Piagam Jakarta", "Pembukaan UUD NRI Tahun 1945 alinea ke-4"], answer: "Pembukaan UUD NRI Tahun 1945 alinea ke-4" },
+      { id: 5, type: 'mc', question: "Nilai-nilai yang terkandung dalam Pancasila sejatinya berasal dari...", options: ["Kristalisasi pengalaman sejarah dan budaya bangsa Indonesia", "Sumbangan pemikiran bangsa asing", "Kebijakan pemerintah kolonial", "Aturan hukum internasional"], answer: "Kristalisasi pengalaman sejarah dan budaya bangsa Indonesia" },
+      { id: 6, type: 'mc', question: "Jika suatu negara tidak memiliki dasar negara, maka akibat yang paling mungkin terjadi adalah...", options: ["Negara menjadi sangat maju", "Negara akan rentan hancur dan kehilangan arah", "Perekonomian akan berkembang pesat", "Masyarakat akan hidup bebas tanpa aturan"], answer: "Negara akan rentan hancur dan kehilangan arah" },
+      { id: 7, type: 'mc', question: "Contoh pengamalan Pancasila sebagai pandangan hidup di lingkungan sekolah adalah...", options: ["Membayar pajak tepat waktu", "Mengikuti pemilu", "Menghormati guru dan menyayangi teman", "Menjaga keamanan kampung"], answer: "Menghormati guru dan menyayangi teman" },
+      { id: 8, type: 'mc', question: "Kata 'Ideologi' berasal dari bahasa Yunani, yaitu 'idea' dan 'logos'. Kata 'idea' memiliki arti...", options: ["Ilmu pengetahuan", "Kekuasaan negara", "Peraturan tertulis", "Gagasan atau konsep"], answer: "Gagasan atau konsep" },
+      { id: 9, type: 'mc', question: "Sebagai sumber dari segala sumber hukum, seluruh peraturan perundang-undangan di Indonesia harus...", options: ["Bersumber dan tidak bertentangan dengan Pancasila", "Dibuat oleh Presiden saja", "Mengikuti hukum negara asing", "Mengutamakan kepentingan golongan"], answer: "Bersumber dan tidak bertentangan dengan Pancasila" },
+      { id: 10, type: 'mc', question: "Sila 'Ketuhanan Yang Maha Esa' dalam pandangan hidup bangsa mengajarkan kita untuk...", options: ["Mewajibkan satu agama untuk semua", "Menghormati perbedaan agama dan kepercayaan", "Mencampuri urusan agama orang lain", "Menghapus perayaan hari besar agama"], answer: "Menghormati perbedaan agama dan kepercayaan" },
+      { id: 11, type: 'mc', question: "Membantu tetangga yang sedang tertimpa musibah merupakan wujud pengamalan Pancasila, khususnya sila ke...", options: ["Satu", "Dua", "Tiga", "Empat"], answer: "Dua" },
+      { id: 12, type: 'mc', question: "Dalam konteks ideologi negara, Pancasila bersifat terbuka. Artinya Pancasila mampu...", options: ["Diubah nilai dasarnya kapan saja", "Menerima semua budaya asing tanpa seleksi", "Menyesuaikan diri dengan perkembangan zaman", "Menolak segala bentuk kemajuan teknologi"], answer: "Menyesuaikan diri dengan perkembangan zaman" },
+      { id: 13, type: 'mc', question: "Contoh tindakan yang mencerminkan sila keempat Pancasila dalam kehidupan berbangsa adalah...", options: ["Menyelesaikan masalah melalui musyawarah mufakat", "Memaksakan kehendak kepada orang lain", "Beribadah sesuai agama masing-masing", "Membanggakan produk dalam negeri"], answer: "Menyelesaikan masalah melalui musyawarah mufakat" },
+      { id: 14, type: 'mc', question: "Pancasila menjadi pedoman dalam menyusun Anggaran Pendapatan dan Belanja Negara (APBN). Hal ini menunjukkan peran Pancasila sebagai...", options: ["Dasar negara", "Falsafah hidup", "Etika sosial", "Sejarah bangsa"], answer: "Dasar negara" },
+      { id: 15, type: 'mc', question: "Menghargai hasil karya orang lain merupakan bentuk pengamalan Pancasila, khususnya sila ke...", options: ["Dua", "Tiga", "Empat", "Lima"], answer: "Lima" },
+      { id: 16, type: 'mc', question: "Gotong royong merupakan ciri khas bangsa Indonesia yang bersumber dari Pancasila sebagai...", options: ["Hukum dasar tertulis", "Pandangan hidup bangsa", "Instrumen kekuasaan", "Dasar ekonomi"], answer: "Pandangan hidup bangsa" },
+      { id: 17, type: 'mc', question: "Peraturan daerah (Perda) yang dibuat tidak boleh bertentangan dengan nilai-nilai Pancasila. Hal ini mencerminkan Pancasila sebagai...", options: ["Dasar negara", "Sistem pemerintahan", "Etika moral", "Kepribadian bangsa"], answer: "Dasar negara" },
+      { id: 18, type: 'mc', question: "Sebagai pelajar, cara mewujudkan Pancasila sebagai ideologi negara di lingkungan keluarga adalah...", options: ["Membayar pajak kendaraan", "Hormat dan patuh pada nasihat orang tua", "Mengikuti rapat paripurna", "Menyusun undang-undang"], answer: "Hormat dan patuh pada nasihat orang tua" },
+      { id: 19, type: 'mc', question: "Ideologi Pancasila tidak mengakui adanya kebebasan yang tanpa batas. Kebebasan dalam Pancasila harus diimbangi dengan...", options: ["Kekayaan materi", "Kekuasaan yang besar", "Tanggung jawab sosial dan moral", "Kepentingan pribadi semata"], answer: "Tanggung jawab sosial dan moral" },
+      { id: 20, type: 'mc', question: "Sikap bangga menggunakan produk dalam negeri adalah wujud pengamalan Pancasila sila ke...", options: ["Satu", "Dua", "Tiga", "Empat"], answer: "Tiga" },
+      { id: 21, type: 'mc', question: "Pemerintah membuat kebijakan beasiswa untuk siswa tidak mampu. Kebijakan ini mencerminkan Pancasila berfungsi sebagai...", options: ["Dasar negara", "Perjanjian luhur", "Alat politik", "Identitas nasional"], answer: "Dasar negara" },
+      { id: 22, type: 'mc', question: "Seorang siswa menolak piket kelas karena merasa tugas itu berat, padahal sudah ada jadwal. Sikap ini melanggar nilai...", options: ["Ketuhanan", "Kemanusiaan", "Persatuan", "Keadilan sosial"], answer: "Keadilan sosial" },
+      { id: 23, type: 'mc', question: "Perbedaan utama antara Pancasila sebagai dasar negara dan pandangan hidup terletak pada...", options: ["Tingkat sanksi bagi warga yang melanggarnya", "Jumlah sila yang diterapkan", "Bahasa yang digunakan", "Tokoh yang merumuskannya"], answer: "Tingkat sanksi bagi warga yang melanggarnya" },
+      { id: 24, type: 'mc', question: "Globalisasi membawa masuk budaya individualisme. Hal ini menjadi tantangan bagi Pancasila sebagai...", options: ["Dasar hukum pidana", "Ideologi negara", "Aturan konstitusi", "Sistem pemilu"], answer: "Ideologi negara" },
+      { id: 25, type: 'mc', question: "Ketika terjadi konflik pemilihan kepala desa, warga menyelesaikannya secara musyawarah di balai desa. Ini menunjukkan fungsi Pancasila sebagai...", options: ["Hukum tata negara", "Pandangan hidup bangsa", "Sistem ekonomi", "Peraturan daerah"], answer: "Pandangan hidup bangsa" },
+      { id: 26, type: 'mc', question: "Sebuah undang-undang dibatalkan oleh Mahkamah Konstitusi karena merugikan rakyat. Hal ini mempertegas kedudukan Pancasila sebagai...", options: ["Pandangan hidup", "Dasar negara", "Kepribadian bangsa", "Cita-cita bangsa"], answer: "Dasar negara" },
+      { id: 27, type: 'mc', question: "Salah satu bentuk perwujudan nilai Pancasila sebagai ideologi di bidang politik adalah...", options: ["Menghormati hak asasi manusia saat berpendapat", "Melakukan monopoli perdagangan", "Menghindari kewajiban membayar pajak", "Menerapkan sistem diktator"], answer: "Menghormati hak asasi manusia saat berpendapat" },
+      { id: 28, type: 'mc', question: "Jika pelajar menyebarkan hoaks yang memicu kebencian antarsuku, ia melanggar Pancasila sila ke...", options: ["Satu dan Dua", "Tiga dan Dua", "Empat dan Lima", "Satu dan Lima"], answer: "Tiga dan Dua" },
+      { id: 29, type: 'mc', question: "Dalam konteks Pancasila sebagai ideologi negara, pembangunan ekonomi nasional diselenggarakan berdasarkan asas...", options: ["Kapitalisme", "Individualisme", "Kekeluargaan", "Monopoli"], answer: "Kekeluargaan" },
+      { id: 30, type: 'mc', question: "Ketua RT sering memutuskan aturan kampung tanpa berunding dengan warga. Hal ini melanggar Pancasila sila ke...", options: ["Pertama", "Kedua", "Ketiga", "Keempat"], answer: "Keempat" },
+      { id: 31, type: 'mc', question: "Fungsi Pancasila sebagai filter atau penyaring di era digital berarti Pancasila digunakan untuk...", options: ["Menutup akses internet bagi masyarakat", "Menyeleksi informasi dan budaya yang sesuai nilai bangsa", "Menerima semua budaya asing", "Melarang penggunaan media sosial"], answer: "Menyeleksi informasi dan budaya yang sesuai nilai bangsa" },
+      { id: 32, type: 'mc', question: "Mengembangkan sikap tenggang rasa dan tepa selira merupakan nilai yang terkandung dalam pengamalan Sila...", options: ["Pertama", "Kedua", "Ketiga", "Keempat"], answer: "Kedua" },
+      { id: 33, type: 'mc', question: "Sebagai dasar negara, Pancasila bersifat mengikat. Artinya...", options: ["Hanya berlaku bagi pejabat pemerintah", "Boleh diikuti, boleh tidak", "Seluruh warga negara dan penyelenggara negara wajib mematuhinya", "Hanya berlaku di ibu kota negara"], answer: "Seluruh warga negara dan penyelenggara negara wajib mematuhinya" },
+      { id: 34, type: 'mc', question: "Bupati membuat program bantuan modal usaha bagi pedagang kecil. Tindakan ini mencerminkan pengamalan Sila...", options: ["Kedua", "Ketiga", "Keempat", "Kelima"], answer: "Kelima" },
+      { id: 35, type: 'mc', question: "Keunggulan Pancasila sebagai ideologi terbuka dibandingkan dengan ideologi tertutup adalah...", options: ["Nilai-nilainya dipaksakan oleh penguasa", "Nilai-nilainya digali dari budaya masyarakatnya sendiri", "Mengabaikan hak asasi manusia", "Tidak bisa mengikuti perkembangan zaman"], answer: "Nilai-nilainya digali dari budaya masyarakatnya sendiri" },
+      { id: 36, type: 'mc', question: "Jika Pembukaan UUD NRI Tahun 1945 diubah oleh lembaga negara, maka secara ketatanegaraan hal tersebut bermakna...", options: ["Penyempurnaan sistem demokrasi", "Membubarkan Negara Kesatuan Republik Indonesia", "Pembaruan hukum pidana", "Pergantian sistem pemerintahan sementara"], answer: "Membubarkan Negara Kesatuan Republik Indonesia" },
+      { id: 37, type: 'mc', question: "Pancasila memiliki dimensi realitas sebagai syarat sebuah ideologi terbuka. Makna dari dimensi realitas adalah...", options: ["Ideologi bersumber dari nilai riil yang hidup di masyarakat", "Ideologi yang hanya ada dalam angan-angan", "Ideologi yang dipaksakan dari luar negeri", "Ideologi yang selalu kaku dan statis"], answer: "Ideologi bersumber dari nilai riil yang hidup di masyarakat" },
+      { id: 38, type: 'mc', question: "Keterkaitan organis antara sila pertama (Ketuhanan) dan sila kelima (Keadilan Sosial) bermakna bahwa...", options: ["Agama mengurus masalah pribadi saja", "Keadilan sosial diwujudkan sebagai bentuk pertanggungjawaban kepada Tuhan", "Kesejahteraan ekonomi lebih penting dari agama", "Ibadah tidak ada hubungannya dengan masyarakat"], answer: "Keadilan sosial diwujudkan sebagai bentuk pertanggungjawaban kepada Tuhan" },
+      { id: 39, type: 'mc', question: "Mengapa ideologi liberalisme bertentangan dengan Pancasila sebagai pandangan hidup bangsa?", options: ["Liberalisme menuntut pemerataan ekonomi secara mutlak", "Liberalisme mengagungkan kebebasan individu di atas kepentingan bersama", "Liberalisme berasal dari negara barat", "Liberalisme melarang adanya kebebasan pers"], answer: "Liberalisme mengagungkan kebebasan individu di atas kepentingan bersama" },
+      { id: 40, type: 'mc', question: "Sebuah kebijakan mempermudah investasi asing namun mengorbankan lahan pertanian rakyat kecil. Kebijakan ini dinilai gagal menjadikan Pancasila sebagai...", options: ["Sistem pemerintahan daerah", "Hukum internasional", "Dasar negara dan paradigma pembangunan", "Sejarah kebudayaan"], answer: "Dasar negara dan paradigma pembangunan" }
+    ];
+
+    // --- UTILS ---
+    const shuffleArray = (array) => {
+      let arr = [...array];
+      for (let i = arr.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+      }
+      return arr;
+    };
+
+    const formatTime = (seconds) => {
+      const h = Math.floor(seconds / 3600);
+      const m = Math.floor((seconds % 3600) / 60);
+      const s = seconds % 60;
+      if (h > 0) return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+      return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+    };
+
+    // --- ICONS (SVG) ---
+    const IconWarning = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-16 w-16 text-yellow-500 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>;
+    const IconError = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-16 w-16 text-red-500 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>;
+    const IconSuccess = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-16 w-16 text-green-500 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>;
+
+    // --- MODAL COMPONENTS ---
+    const AlertModal = ({ title, message, icon, onConfirm, confirmText = "Mengerti" }) => (
+      <div className="modal-backdrop">
+        <div className="bg-white rounded-xl shadow-2xl p-8 max-w-sm w-full text-center mx-4">
+          <div className="flex justify-center">
+            {icon === 'warning' && <IconWarning />}
+            {icon === 'error' && <IconError />}
+            {icon === 'success' && <IconSuccess />}
+          </div>
+          <h2 className="text-2xl font-bold text-gray-800 mb-2">{title}</h2>
+          <p className="text-gray-600 mb-6">{message}</p>
+          <button onClick={onConfirm} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-lg transition">
+            {confirmText}
+          </button>
+        </div>
+      </div>
+    );
+
+    const ConfirmModal = ({ title, message, onConfirm, onCancel }) => (
+      <div className="modal-backdrop">
+        <div className="bg-white rounded-xl shadow-2xl p-8 max-w-sm w-full text-center mx-4">
+          <h2 className="text-2xl font-bold text-gray-800 mb-2">{title}</h2>
+          <p className="text-gray-600 mb-6">{message}</p>
+          <div className="flex space-x-4">
+            <button onClick={onCancel} className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 font-semibold py-3 px-6 rounded-lg transition">
+              Batal
+            </button>
+            <button onClick={onConfirm} className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-lg transition">
+              Ya, Kumpulkan
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+
+    // --- MAIN APP COMPONENT ---
+    const App = () => {
+      const [appState, setAppState] = useState('INIT'); // INIT, LOGIN, RECOVERY, EXAM, SUBMITTING, DONE
+      const [studentData, setStudentData] = useState({ name: '', class: '', date: new Date().toISOString().split('T')[0] });
+      
+      const [questions, setQuestions] = useState([]);
+      const [answers, setAnswers] = useState({});
+      const [currentIndex, setCurrentIndex] = useState(0);
+      const [timeLeft, setTimeLeft] = useState(EXAM_DURATION_MINUTES * 60);
+      const [violations, setViolations] = useState(0);
+      const [finalScore, setFinalScore] = useState(0);
+      const [submitMsg, setSubmitMsg] = useState('');
+
+      // Modals State
+      const [modalConfig, setModalConfig] = useState(null); // { type: 'alert'|'confirm', title, message, icon, onConfirm, onCancel, confirmText }
+
+      useEffect(() => {
+        const savedData = localStorage.getItem(STORAGE_KEY);
+        if (savedData) {
+          try {
+            const parsed = JSON.parse(savedData);
+            if (parsed.status === 'ONGOING') {
+              setAppState('RECOVERY');
+            } else {
+              setAppState('LOGIN');
+            }
+          } catch (e) { setAppState('LOGIN'); }
+        } else {
+          setAppState('LOGIN');
+        }
+      }, []);
+
+      const saveProgress = useCallback((newState) => {
+        const dataToSave = {
+          status: 'ONGOING',
+          studentData: newState.studentData || studentData,
+          questions: newState.questions || questions,
+          answers: newState.answers || answers,
+          timeLeft: newState.timeLeft !== undefined ? newState.timeLeft : timeLeft,
+          violations: newState.violations !== undefined ? newState.violations : violations
+        };
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(dataToSave));
+      }, [studentData, questions, answers, timeLeft, violations]);
+
+      const handleStartNewExam = (e) => {
+        if(e) e.preventDefault();
+        
+        const shuffledQuestions = shuffleArray(rawQuestionsData).map(q => ({
+          ...q,
+          options: q.type === 'mc' ? shuffleArray(q.options) : q.options
+        }));
+
+        setQuestions(shuffledQuestions);
+        setAnswers({});
+        setCurrentIndex(0);
+        setTimeLeft(EXAM_DURATION_MINUTES * 60);
+        setViolations(0);
+        setAppState('EXAM');
+        
+        saveProgress({
+          studentData, questions: shuffledQuestions, answers: {}, timeLeft: EXAM_DURATION_MINUTES * 60, violations: 0
+        });
+
+        requestFullscreen();
+      };
+
+      const handleResumeExam = () => {
+        const savedData = JSON.parse(localStorage.getItem(STORAGE_KEY));
+        setStudentData(savedData.studentData);
+        setQuestions(savedData.questions);
+        setAnswers(savedData.answers);
+        setTimeLeft(savedData.timeLeft);
+        setViolations(savedData.violations);
+        setAppState('EXAM');
+        requestFullscreen();
+      };
+
+      const handleResetExam = () => {
+        localStorage.removeItem(STORAGE_KEY);
+        setAppState('LOGIN');
+      };
+
+      const requestFullscreen = () => {
+        const elem = document.documentElement;
+        if (elem.requestFullscreen) {
+          elem.requestFullscreen().catch(err => console.log(err));
+        }
+      };
+
+      // Timer & Anti-cheat Hooks
+      useEffect(() => {
+        if (appState !== 'EXAM') return;
+
+        const timer = setInterval(() => {
+          setTimeLeft((prev) => {
+            const newVal = prev - 1;
+            if (newVal <= 0) {
+              clearInterval(timer);
+              handleAutoSubmit("Waktu Ujian Habis!");
+              return 0;
+            }
+            if (newVal % 5 === 0) saveProgress({ timeLeft: newVal }); // Save every 5s
+            return newVal;
+          });
+        }, 1000);
+
+        const handleVisibilityChange = () => {
+          if (document.hidden) triggerViolation();
+        };
+
+        const handleFullscreenChange = () => {
+          if (!document.fullscreenElement) triggerViolation();
+        };
+
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+        document.addEventListener('fullscreenchange', handleFullscreenChange);
+
+        return () => {
+          clearInterval(timer);
+          document.removeEventListener('visibilitychange', handleVisibilityChange);
+          document.removeEventListener('fullscreenchange', handleFullscreenChange);
+        };
+      }, [appState]);
+
+      const triggerViolation = () => {
+        setViolations((prev) => {
+          const newV = prev + 1;
+          saveProgress({ violations: newV });
+          
+          if (newV === 1) {
+            setModalConfig({
+              type: 'alert', title: "Peringatan Pelanggaran!", 
+              message: "Anda terdeteksi keluar dari layar ujian. Jika mengulangi lagi, ujian akan otomatis disubmit!",
+              icon: 'warning',
+              onConfirm: () => { setModalConfig(null); requestFullscreen(); }
+            });
+          } else if (newV >= 2) {
+            setModalConfig(null); // Clear modals
+            handleAutoSubmit("Terdeteksi kecurangan berulang. Ujian dihentikan paksa.");
+          }
+          return newV;
+        });
+      };
+
+      const handleSelectAnswer = (qId, option) => {
+        const newAnswers = { ...answers, [qId]: option };
+        setAnswers(newAnswers);
+        saveProgress({ answers: newAnswers });
+      };
+
+      const processSubmission = async (reasonMsg) => {
+        setAppState('SUBMITTING');
+        let correctCount = 0;
+        let detailsArr = [];
+
+        // Rincian Jawaban diurutkan berdasarkan ID asli
+        const sortedQuestions = [...questions].sort((a, b) => a.id - b.id);
+
+        sortedQuestions.forEach(q => {
+          const studentAns = answers[q.id];
+          if (!studentAns) {
+            detailsArr.push(`Soal ${q.id}: KOSONG`);
+          } else if (studentAns === q.answer) {
+            correctCount++;
+            detailsArr.push(`Soal ${q.id}: BENAR`);
+          } else {
+            detailsArr.push(`Soal ${q.id}: SALAH (Pilih: ${studentAns}, Kunci: ${q.answer})`);
+          }
+        });
+
+        const score = Math.round((correctCount / sortedQuestions.length) * 100);
+        setFinalScore(score);
+        const rincianJawaban = detailsArr.join(" | ");
+
+        const payload = {
+          timestamp: new Date().toLocaleString('id-ID'),
+          nama: studentData.name,
+          kelas: studentData.class,
+          tanggal: studentData.date,
+          skor: score,
+          pelanggaran: violations,
+          keterangan: reasonMsg,
+          rincianJawaban: rincianJawaban
+        };
+
+        try {
+          await fetch(GOOGLE_SHEETS_WEB_APP_URL, {
+            method: 'POST',
+            mode: 'no-cors',
+            headers: { 'Content-Type': 'text/plain' },
+            body: JSON.stringify(payload)
+          });
+        } catch (e) {
+          console.error("Gagal mengirim data", e);
+        }
+
+        localStorage.removeItem(STORAGE_KEY);
+        setAppState('DONE');
+      };
+
+      const handleAutoSubmit = (msg) => {
+        setModalConfig({
+          type: 'alert', title: "Ujian Berakhir", message: msg, icon: 'error',
+          onConfirm: () => { setModalConfig(null); processSubmission(msg); }
+        });
+      };
+
+      const handleManualSubmit = () => {
+        setModalConfig({
+          type: 'confirm', title: "Kumpulkan Ujian?", 
+          message: "Pastikan semua jawaban sudah terisi. Anda yakin ingin mengumpulkan sekarang?",
+          onConfirm: () => { setModalConfig(null); processSubmission("Selesai Normal"); },
+          onCancel: () => setModalConfig(null)
+        });
+      };
+
+      // --- RENDERERS ---
+
+      if (appState === 'INIT') return null;
+
+      if (appState === 'LOGIN') {
+        return (
+          <div className="flex items-center justify-center min-h-screen p-4">
+            <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full">
+              <div className="text-center mb-8">
+                <h1 className="text-3xl font-bold text-blue-700">{EXAM_SUBJECT}</h1>
+                <p className="text-gray-600 font-medium">{EXAM_TYPE} - KELAS {EXAM_CLASS}</p>
+                <div className="mt-4 inline-block bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm font-semibold">
+                  Durasi: {EXAM_DURATION_MINUTES} Menit
+                </div>
+              </div>
+              <form onSubmit={handleStartNewExam} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Nama Lengkap</label>
+                  <input required type="text" className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" 
+                    value={studentData.name} onChange={e => setStudentData({...studentData, name: e.target.value})} placeholder="Masukkan nama" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Kelas</label>
+                  <input required type="text" className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" 
+                    value={studentData.class} onChange={e => setStudentData({...studentData, class: e.target.value})} placeholder="Contoh: VIII-A" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Tanggal Ujian</label>
+                  <input required type="date" className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" 
+                    value={studentData.date} onChange={e => setStudentData({...studentData, date: e.target.value})} />
+                </div>
+                <button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg mt-6 shadow-lg transition transform hover:-translate-y-0.5">
+                  Mulai Ujian
+                </button>
+              </form>
+            </div>
+          </div>
+        );
+      }
+
+      if (appState === 'RECOVERY') {
+        return (
+          <div className="flex items-center justify-center min-h-screen p-4">
+            <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full text-center">
+              <IconWarning />
+              <h2 className="text-2xl font-bold text-gray-800 mb-4">Sesi Ujian Tersimpan!</h2>
+              <p className="text-gray-600 mb-6">Sistem menemukan progres ujian Anda yang belum disubmit. Ingin melanjutkan?</p>
+              <div className="space-y-3">
+                <button onClick={handleResumeExam} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg shadow transition">
+                  Lanjutkan Ujian
+                </button>
+                <button onClick={handleResetExam} className="w-full bg-red-100 hover:bg-red-200 text-red-700 font-bold py-3 rounded-lg transition">
+                  Mulai Ulang (Hapus Progres)
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      }
+
+      if (appState === 'SUBMITTING') {
+        return (
+          <div className="flex flex-col items-center justify-center min-h-screen text-white">
+            <svg className="animate-spin h-12 w-12 text-white mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+            <h2 className="text-2xl font-bold">Mengirim Jawaban...</h2>
+          </div>
+        );
+      }
+
+      if (appState === 'DONE') {
+        return (
+          <div className="flex items-center justify-center min-h-screen p-4">
+            <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full text-center">
+              <IconSuccess />
+              <h2 className="text-3xl font-bold text-gray-800 mb-2">Ujian Selesai!</h2>
+              <p className="text-gray-600 mb-6">Terima kasih, data ujian Anda telah berhasil dikirim ke sistem.</p>
+              
+              <div className="bg-gray-50 rounded-lg p-6 mb-6 shadow-inner">
+                <p className="text-sm text-gray-500 mb-1">Skor Anda</p>
+                <p className="text-5xl font-extrabold text-blue-600">{finalScore}</p>
+              </div>
+
+              <div className="text-left text-sm text-gray-600 bg-blue-50 p-4 rounded-lg">
+                <p><strong>Nama:</strong> {studentData.name}</p>
+                <p><strong>Kelas:</strong> {studentData.class}</p>
+              </div>
+            </div>
+          </div>
+        );
+      }
+
+      // EXAM UI
+      const currentQ = questions[currentIndex];
+      
+      return (
+        <div className="min-h-screen flex flex-col bg-gray-50">
+          {/* Header */}
+          <header className="bg-white shadow-md px-6 py-4 flex flex-wrap justify-between items-center sticky top-0 z-10">
+            <div>
+              <h1 className="text-xl font-bold text-blue-800">{EXAM_SUBJECT}</h1>
+              <p className="text-sm text-gray-500 font-medium">{EXAM_TYPE} - KELAS {studentData.class} ({studentData.name})</p>
+            </div>
+            <div className={`mt-2 sm:mt-0 font-mono text-xl font-bold px-4 py-2 rounded-lg shadow-inner ${timeLeft < 300 ? 'bg-red-100 text-red-600 animate-pulse' : 'bg-gray-100 text-gray-800'}`}>
+              Sisa Waktu: {formatTime(timeLeft)}
+            </div>
+          </header>
+
+          <main className="flex-grow flex flex-col md:flex-row p-4 gap-4 max-w-7xl mx-auto w-full">
+            {/* Left/Center: Question & Options */}
+            <div className="flex-grow bg-white rounded-xl shadow p-6 lg:p-10 flex flex-col">
+              <div className="flex-grow">
+                <h3 className="text-lg font-bold text-gray-800 mb-4 border-b pb-2">Soal No. {currentIndex + 1}</h3>
+                <p className="text-gray-700 text-lg mb-6 leading-relaxed whitespace-pre-wrap">{currentQ.question}</p>
+                
+                {currentQ.image && (
+                  <img src={currentQ.image} alt="Ilustrasi Soal" className="mb-6 rounded max-w-full h-auto shadow-sm" />
+                )}
+
+                <div className="space-y-3">
+                  {currentQ.options.map((opt, i) => {
+                    const isSelected = answers[currentQ.id] === opt;
+                    return (
+                      <div 
+                        key={i} 
+                        onClick={() => handleSelectAnswer(currentQ.id, opt)}
+                        className={`p-4 border rounded-lg cursor-pointer transition-colors ${isSelected ? 'bg-blue-50 border-blue-500 ring-1 ring-blue-500' : 'bg-white hover:bg-gray-50 border-gray-300'}`}
+                      >
+                        <div className="flex items-center">
+                          <div className={`w-6 h-6 flex-shrink-0 rounded-full border-2 mr-4 flex items-center justify-center ${isSelected ? 'border-blue-500' : 'border-gray-400'}`}>
+                            {isSelected && <div className="w-3 h-3 bg-blue-500 rounded-full"></div>}
+                          </div>
+                          <span className="text-gray-700">{opt}</span>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {/* Navigation Buttons */}
+              <div className="mt-8 pt-4 border-t flex justify-between items-center">
+                <button 
+                  onClick={() => setCurrentIndex(prev => Math.max(0, prev - 1))}
+                  disabled={currentIndex === 0}
+                  className="px-6 py-2 bg-gray-200 text-gray-700 rounded shadow hover:bg-gray-300 disabled:opacity-50"
+                >
+                  Sebelumnya
+                </button>
+                
+                <div className="flex gap-2">
+                  {currentIndex < questions.length - 1 && (
+                    <button 
+                      onClick={() => setCurrentIndex(prev => Math.min(questions.length - 1, prev + 1))}
+                      className="px-6 py-2 bg-blue-600 text-white rounded shadow hover:bg-blue-700"
+                    >
+                      Selanjutnya
+                    </button>
+                  )}
+                  {currentIndex === questions.length - 1 && (
+                    <button 
+                      onClick={handleManualSubmit}
+                      className="px-6 py-2 bg-green-500 text-white font-bold rounded shadow hover:bg-green-600"
+                    >
+                      Selesai & Kumpulkan
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Right/Bottom: Question Navigator */}
+            <div className="w-full md:w-80 bg-white rounded-xl shadow p-6 h-fit">
+              <h3 className="text-md font-bold text-gray-800 mb-4 text-center">Navigasi Soal</h3>
+              <div className="grid grid-cols-5 gap-2">
+                {questions.map((q, idx) => {
+                  const isAnswered = !!answers[q.id];
+                  const isActive = idx === currentIndex;
+                  return (
+                    <button
+                      key={q.id}
+                      onClick={() => setCurrentIndex(idx)}
+                      className={`
+                        w-full aspect-square rounded font-bold text-sm flex items-center justify-center border transition-all
+                        ${isAnswered ? 'bg-green-500 text-white border-green-600' : 'bg-gray-100 text-gray-600 border-gray-300 hover:bg-gray-200'}
+                        ${isActive ? 'ring-2 ring-offset-2 ring-blue-500' : ''}
+                      `}
+                    >
+                      {idx + 1}
+                    </button>
+                  )
+                })}
+              </div>
+              <div className="mt-6 flex flex-col gap-2 text-sm text-gray-600">
+                <div className="flex items-center gap-2"><div className="w-4 h-4 bg-green-500 rounded"></div> Sudah Dijawab</div>
+                <div className="flex items-center gap-2"><div className="w-4 h-4 bg-gray-100 border border-gray-300 rounded"></div> Belum Dijawab</div>
+              </div>
+            </div>
+          </main>
+
+          {/* Render Modals at the Root Level inside App to avoid layout flicker */}
+          {modalConfig && modalConfig.type === 'alert' && (
+            <AlertModal {...modalConfig} />
+          )}
+          {modalConfig && modalConfig.type === 'confirm' && (
+            <ConfirmModal {...modalConfig} />
+          )}
+        </div>
+      );
+    };
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>
